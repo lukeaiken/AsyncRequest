@@ -1,0 +1,11 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<CustomField xmlns="http://soap.sforce.com/2006/04/metadata">
+    <fullName>AsyncRequestsPurged__c</fullName>
+    <defaultValue>true</defaultValue>
+    <description>Deletes, and removes from the Recycling Bin, any Async Request that processes successfully without any exception.</description>
+    <externalId>false</externalId>
+    <inlineHelpText>Uncheck to retain, and not destroy, successfully processed Async Request records — typically unchecked for debugging purposes.</inlineHelpText>
+    <label>Async Requests Are Purged</label>
+    <trackTrending>false</trackTrending>
+    <type>Checkbox</type>
+</CustomField>
