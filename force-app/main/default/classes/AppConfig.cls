@@ -1,4 +1,5 @@
 public without sharing class AppConfig {
+    public static Boolean preventDML = false;
 
     public Boolean asyncRequestsEnabled {
         get {
@@ -44,7 +45,9 @@ public without sharing class AppConfig {
 
             SObjectAccessDecision decision = Security.stripInaccessible(AccessType.CREATABLE, new List<SObject>{settings}, true);
 
-            if (!Test.isRunningTest()) insert decision.getRecords()[0];
+            if (!Test.isRunningTest()) {
+              if (!preventDML) insert decision.getRecords()[0];
+            }
             else testConfig = settings;
         }
 
