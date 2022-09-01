@@ -10,4 +10,8 @@ private class AppConfigTest {
         settings.updateAsyncRequestsPurged(asyncRequestsArePurged);
     }
 
+    @IsTest static void testTestConfig() {
+      AppConfig.testConfig = new AppConfig__c();
+      AppConfig settings = new AppConfig();
+    }
 }
