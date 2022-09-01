@@ -1,8 +1,5 @@
 public without sharing class AppConfig {
 
-    public static Set<String> asyncTypesToEnqueue = new Set<String>();
-    public static Map<String, List<Id>> parentIdsByDependentTypes = new Map<String, List<Id>>();
-
     public Boolean asyncRequestsEnabled {
         get {
             return GetSettings().AsyncRequestsEnabled__c;

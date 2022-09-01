@@ -10,7 +10,7 @@ private class AsyncRequestTriggerHandlerTest {
 
         Test.stopTest();
 
-        System.assert(AppConfig.asyncTypesToEnqueue.contains(TestProcessor.class.getName()));
+        System.assert(AsyncRequestTriggerHandler.asyncTypesToEnqueue.contains(TestProcessor.class.getName()));
     }
 
     @IsTest static void testRetryAsyncRequests() {
@@ -29,6 +29,6 @@ private class AsyncRequestTriggerHandlerTest {
 
         Test.stopTest();
 
-        System.assert(AppConfig.asyncTypesToEnqueue.contains(TestProcessor.class.getName()));
+        System.assert(AsyncRequestTriggerHandler.asyncTypesToEnqueue.contains(TestProcessor.class.getName()));
     }
 }

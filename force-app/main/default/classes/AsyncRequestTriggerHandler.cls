@@ -1,5 +1,7 @@
 public inherited sharing class AsyncRequestTriggerHandler extends TriggerHandler {
     private static AppConfig appSettings = new AppConfig();
+    public static Map<String, List<Id>> parentIdsByDependentTypes = new Map<String, List<Id>>();
+    public static Set<String> asyncTypesToEnqueue = new Set<String>();
 
     public override void afterInsert() {
         enqueueRequests(Trigger.new);
@@ -12,11 +14,11 @@ public inherited sharing class AsyncRequestTriggerHandler extends TriggerHandler
     private static void enqueueRequests(List<AsyncRequest__c> asyncRequests) {
         for (AsyncRequest__c request : asyncRequests) {
             if (request.ParentRequest__c == null) {
-                AppConfig.asyncTypesToEnqueue.add(request.AsyncType__c);
+                asyncTypesToEnqueue.add(request.AsyncType__c);
             }
         }
 
-        for (String asyncType : AppConfig.asyncTypesToEnqueue) {
+        for (String asyncType : asyncTypesToEnqueue) {
             AsyncRequestProcessor.enqueueJob(null, null, asyncType);
         }
     }
@@ -27,20 +29,20 @@ public inherited sharing class AsyncRequestTriggerHandler extends TriggerHandler
 
             if (oldAsyncRequest.Error__c && !newAsyncRequest.Error__c) {
                 if (newAsyncRequest.ParentRequest__c != null) {
-                    if (!AppConfig.parentIdsByDependentTypes.containsKey(newAsyncRequest.AsyncType__c))
-                        AppConfig.parentIdsByDependentTypes.put(newAsyncRequest.AsyncType__c, new List<Id>());
-                    AppConfig.parentIdsByDependentTypes.get(newAsyncRequest.AsyncType__c).add(newAsyncRequest.ParentRequest__c);
+                    if (!parentIdsByDependentTypes.containsKey(newAsyncRequest.AsyncType__c))
+                        parentIdsByDependentTypes.put(newAsyncRequest.AsyncType__c, new List<Id>());
+                    parentIdsByDependentTypes.get(newAsyncRequest.AsyncType__c).add(newAsyncRequest.ParentRequest__c);
                 } else {
-                    AppConfig.asyncTypesToEnqueue.add(newAsyncRequest.AsyncType__c);
+                    asyncTypesToEnqueue.add(newAsyncRequest.AsyncType__c);
                 }
             }
         }
 
-        for (String asyncType : AppConfig.asyncTypesToEnqueue)
+        for (String asyncType : asyncTypesToEnqueue)
             AsyncRequestProcessor.enqueueJob(null, null, asyncType);
 
-        for (String asyncType : AppConfig.parentIdsByDependentTypes.keySet()) {
-            for (Id parentRequestId : AppConfig.parentIdsByDependentTypes.get(asyncType)) {
+        for (String asyncType : parentIdsByDependentTypes.keySet()) {
+            for (Id parentRequestId : parentIdsByDependentTypes.get(asyncType)) {
                 AsyncRequestProcessor.enqueueJob(null, parentRequestId, asyncType);
             }
         }
