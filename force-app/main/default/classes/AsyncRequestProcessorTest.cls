@@ -1,88 +1,184 @@
 @IsTest
 private class AsyncRequestProcessorTest {
+    private static final String TEST_TYPE = TestProcessor.class.getName();
+
+    @TestSetup static void setup() {
+        AsyncRequestTestUtil.createAsyncUser();
+    }
 
     @IsTest static void testEnqueueJob() {
-        AsyncRequest__c asyncRequest = new AsyncRequest__c(AsyncType__c = TestProcessor.class.getName());
+        System.runAs(AsyncRequestTestUtil.getAsyncUser()) {
+            AsyncRequest__c asyncRequest = new AsyncRequest__c(AsyncType__c = TEST_TYPE);
 
-        insert asyncRequest;
+            insert asyncRequest;
 
-        Test.startTest();
-        AsyncRequestProcessor.enqueueJob(null, null, TestProcessor.class.getName());
-        Test.stopTest();
+            Test.startTest();
+            AsyncRequestProcessor.enqueueJob(null, null, TEST_TYPE);
+            Test.stopTest();
+        }
     }
 
     @IsTest static void testTryToQueue() {
-        AsyncRequest__c asyncRequest = new AsyncRequest__c(AsyncType__c = TestProcessor.class.getName());
+        System.runAs(AsyncRequestTestUtil.getAsyncUser()) {
+            AsyncRequest__c asyncRequest = new AsyncRequest__c(AsyncType__c = TEST_TYPE);
 
-        insert asyncRequest;
+            insert asyncRequest;
 
-        Test.startTest();
-        AsyncRequestProcessor.tryToQueue(null, null, TestProcessor.class.getName());
-        Test.stopTest();
+            Test.startTest();
+            AsyncRequestProcessor.tryToQueue(null, null, TEST_TYPE);
+            Test.stopTest();
+        }
     }
 
     @IsTest static void testTryToQueueWithRequestId() {
-        AsyncRequest__c asyncRequest = new AsyncRequest__c(AsyncType__c = TestProcessor.class.getName());
+        System.runAs(AsyncRequestTestUtil.getAsyncUser()) {
+            AsyncRequest__c asyncRequest = new AsyncRequest__c(AsyncType__c = TEST_TYPE);
 
-        insert asyncRequest;
+            insert asyncRequest;
 
-        Test.startTest();
-        AsyncRequestProcessor.tryToQueue(null, asyncRequest.Id, TestProcessor.class.getName());
-        Test.stopTest();
+            Test.startTest();
+            AsyncRequestProcessor.tryToQueue(null, asyncRequest.Id, TEST_TYPE);
+            Test.stopTest();
+        }
+    }
+
+    @IsTest static void testProcessedRequestIsPurged() {
+        System.runAs(AsyncRequestTestUtil.getAsyncUser()) {
+            AsyncRequestTestUtil.insertWithoutTrigger(new List<AsyncRequest__c>{
+                    new AsyncRequest__c(AsyncType__c = TEST_TYPE)});
+
+            Test.startTest();
+            AsyncRequestProcessor.enqueueJob(null, null, TEST_TYPE);
+            Test.stopTest();
+
+            Assert.areEqual(0, [SELECT COUNT() FROM AsyncRequest__c], 'Processed request should be purged');
+        }
+    }
+
+    @IsTest static void testProcessedRequestIsDeactivatedWhenPurgeDisabled() {
+        System.runAs(AsyncRequestTestUtil.getAsyncUser()) {
+            AppConfig.testConfig.AsyncRequestsPurged__c = false;
+
+            AsyncRequest__c asyncRequest = new AsyncRequest__c(AsyncType__c = TEST_TYPE);
+            AsyncRequestTestUtil.insertWithoutTrigger(new List<AsyncRequest__c>{asyncRequest});
+
+            Test.startTest();
+            AsyncRequestProcessor.enqueueJob(null, null, TEST_TYPE);
+            Test.stopTest();
+
+            AsyncRequest__c processed = [SELECT StartDatetime__c, NumberOfAttempts__c FROM AsyncRequest__c WHERE Id = :asyncRequest.Id];
+            Assert.isNull(processed.StartDatetime__c, 'Processed request should be deactivated, not deleted');
+            Assert.areEqual(1, processed.NumberOfAttempts__c, 'Attempt count should be incremented');
+        }
     }
 
     @IsTest static void testParentWithSingleChildRequest() {
-        AsyncRequest__c parentAsyncRequest = new AsyncRequest__c(
-                AsyncType__c = TestProcessor.class.getName(),
-                StartDatetime__c = Datetime.now().addDays(-1));
+        System.runAs(AsyncRequestTestUtil.getAsyncUser()) {
+            AsyncRequest__c parentAsyncRequest = new AsyncRequest__c(AsyncType__c = TEST_TYPE, StartDatetime__c = null);
+            AsyncRequestTestUtil.insertWithoutTrigger(new List<AsyncRequest__c>{parentAsyncRequest});
 
-        insert parentAsyncRequest;
+            AsyncRequestTestUtil.insertWithoutTrigger(new List<AsyncRequest__c>{
+                    new AsyncRequest__c(AsyncType__c = TEST_TYPE, ParentRequest__c = parentAsyncRequest.Id)});
 
-        AsyncRequest__c childAsyncRequest = new AsyncRequest__c(AsyncType__c = TestProcessor.class.getName());
-        childAsyncRequest.ParentRequest__c = parentAsyncRequest.Id;
+            Test.startTest();
+            AsyncRequestProcessor.enqueueJob(null, parentAsyncRequest.Id, TEST_TYPE);
+            Test.stopTest();
 
-        insert childAsyncRequest;
-
-        Test.startTest();
-        AsyncRequestProcessor.testChildContext = true;
-        AsyncRequestProcessor.enqueueJob(null, parentAsyncRequest.Id, TestProcessor.class.getName());
-        Test.stopTest();
+            Assert.areEqual(0, [SELECT COUNT() FROM AsyncRequest__c],
+                    'Parent and its only child should both be purged once the child completes');
+        }
     }
 
     @IsTest static void testParentWithMultipleChildRequest() {
-        AsyncRequest__c parentAsyncRequest = new AsyncRequest__c(
-                AsyncType__c = TestProcessor.class.getName(),
-                StartDatetime__c = Datetime.now().addDays(-1)
-        );
-        insert parentAsyncRequest;
+        System.runAs(AsyncRequestTestUtil.getAsyncUser()) {
+            AsyncRequest__c parentAsyncRequest = new AsyncRequest__c(AsyncType__c = TEST_TYPE, StartDatetime__c = null);
+            AsyncRequestTestUtil.insertWithoutTrigger(new List<AsyncRequest__c>{parentAsyncRequest});
 
-        List<AsyncRequest__c> childRequests = new List<AsyncRequest__c>();
+            List<AsyncRequest__c> childRequests = new List<AsyncRequest__c>();
 
-        for (Integer i = 0; i < 2; i++) {
-            childRequests.add(new AsyncRequest__c(
-                    AsyncType__c = TestProcessor.class.getName(),
-                    ParentRequest__c = parentAsyncRequest.Id));
+            for (Integer i = 0; i < 2; i++) {
+                childRequests.add(new AsyncRequest__c(
+                        AsyncType__c = TEST_TYPE,
+                        ParentRequest__c = parentAsyncRequest.Id));
+            }
+
+            AsyncRequestTestUtil.insertWithoutTrigger(childRequests);
+
+            Test.startTest();
+            AsyncRequestProcessor.enqueueJob(null, parentAsyncRequest.Id, TEST_TYPE);
+            Test.stopTest();
+
+            Assert.areEqual(1, [SELECT COUNT() FROM AsyncRequest__c WHERE ParentRequest__c = :parentAsyncRequest.Id],
+                    'Only the processed child should be purged');
+            Assert.areEqual(1, [SELECT COUNT() FROM AsyncRequest__c WHERE Id = :parentAsyncRequest.Id],
+                    'Parent should remain while a child is still pending');
         }
-
-        insert childRequests;
-
-        Test.startTest();
-        AsyncRequestProcessor.testChildContext = true;
-        AsyncRequestProcessor.enqueueJob(null, parentAsyncRequest.Id, TestProcessor.class.getName());
-        Test.stopTest();
     }
 
     @IsTest static void testExceptionHandling() {
         AsyncRequestProcessor.testExpectException = true;
 
-        AsyncRequest__c asyncRequest = new AsyncRequest__c(
-                AsyncType__c = TestProcessor.class.getName(),
-                Params__c = 'TestProcessorException');
+        System.runAs(AsyncRequestTestUtil.getAsyncUser()) {
+            AsyncRequest__c asyncRequest = new AsyncRequest__c(
+                    AsyncType__c = TEST_TYPE,
+                    Params__c = 'TestProcessorException');
 
-        insert asyncRequest;
+            insert asyncRequest;
 
-        Test.startTest();
-        AsyncRequestProcessor.enqueueJob(null, null, TestProcessor.class.getName());
-        Test.stopTest();
+            Test.startTest();
+            AsyncRequestProcessor.enqueueJob(null, null, TEST_TYPE);
+            Test.stopTest();
+        }
+    }
+
+    @IsTest static void testDependentRequestExceptionIsRecorded() {
+        AsyncRequestProcessor.testExpectException = true;
+
+        System.runAs(AsyncRequestTestUtil.getAsyncUser()) {
+            AsyncRequest__c parentAsyncRequest = new AsyncRequest__c(AsyncType__c = TEST_TYPE, StartDatetime__c = null);
+            AsyncRequestTestUtil.insertWithoutTrigger(new List<AsyncRequest__c>{parentAsyncRequest});
+
+            AsyncRequest__c childAsyncRequest = new AsyncRequest__c(
+                    AsyncType__c = TEST_TYPE,
+                    ParentRequest__c = parentAsyncRequest.Id,
+                    Params__c = 'TestProcessorException');
+            AsyncRequestTestUtil.insertWithoutTrigger(new List<AsyncRequest__c>{childAsyncRequest});
+
+            Test.startTest();
+            AsyncRequestProcessor.enqueueJob(null, parentAsyncRequest.Id, TEST_TYPE);
+            Test.stopTest();
+
+            AsyncRequest__c failed = [SELECT Error__c, ErrorMessage__c FROM AsyncRequest__c WHERE Id = :childAsyncRequest.Id];
+            Assert.isTrue(failed.Error__c, 'Failed child should be flagged as errored');
+            Assert.areEqual('TestProcessorException', failed.ErrorMessage__c, 'Exception message should be stored');
+        }
+    }
+
+    @IsTest static void testEnqueueJobWithInvalidTypeIsHandled() {
+        System.runAs(AsyncRequestTestUtil.getAsyncUser()) {
+            Test.startTest();
+            AsyncRequestProcessor.enqueueJob(null, null, 'NotAnAsyncRequestProcessor');
+            Assert.areEqual(0, Limits.getQueueableJobs(), 'No job should be queued for an unknown type');
+            Test.stopTest();
+        }
+    }
+
+    @IsTest static void testFinalizerLogsUnhandledException() {
+        System.runAs(AsyncRequestTestUtil.getAsyncUser()) {
+            AsyncRequestProcessor processor = new TestProcessor();
+
+            Test.startTest();
+            processor.execute(new FailedFinalizerContext());
+            Test.stopTest();
+
+            Assert.isNotNull(processor, 'Finalizer should handle an unhandled exception without rethrowing');
+        }
+    }
+
+    private class FailedFinalizerContext implements FinalizerContext {
+        public Id getAsyncApexJobId() { return null; }
+        public String getRequestId() { return null; }
+        public ParentJobResult getResult() { return ParentJobResult.UNHANDLED_EXCEPTION; }
+        public Exception getException() { return new DmlException('Simulated failure'); }
     }
 }
