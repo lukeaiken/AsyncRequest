@@ -141,7 +141,8 @@ private class AsyncRequestProcessorTest {
             AsyncRequest__c childAsyncRequest = new AsyncRequest__c(
                     AsyncType__c = TEST_TYPE,
                     ParentRequest__c = parentAsyncRequest.Id,
-                    Params__c = 'TestProcessorException');
+                    Params__c = 'TestProcessorException',
+                    RetryCount__c = 0);
             AsyncRequestTestUtil.insertWithoutTrigger(new List<AsyncRequest__c>{childAsyncRequest});
 
             Test.startTest();
@@ -151,6 +152,49 @@ private class AsyncRequestProcessorTest {
             AsyncRequest__c failed = [SELECT Error__c, ErrorMessage__c FROM AsyncRequest__c WHERE Id = :childAsyncRequest.Id];
             Assert.isTrue(failed.Error__c, 'Failed child should be flagged as errored');
             Assert.areEqual('TestProcessorException', failed.ErrorMessage__c, 'Exception message should be stored');
+        }
+    }
+
+    @IsTest static void testFailedRequestIsRescheduledWhileRetriesRemain() {
+        AsyncRequestProcessor.testExpectException = true;
+
+        System.runAs(AsyncRequestTestUtil.getAsyncUser()) {
+            AsyncRequest__c asyncRequest = new AsyncRequest__c(
+                    AsyncType__c = TEST_TYPE,
+                    Params__c = 'TestProcessorException',
+                    RetryCount__c = 3);
+            AsyncRequestTestUtil.insertWithoutTrigger(new List<AsyncRequest__c>{asyncRequest});
+            Datetime earliestRetry = Datetime.now().addMinutes(4);
+
+            Test.startTest();
+            AsyncRequestProcessor.enqueueJob(null, null, TEST_TYPE);
+            Test.stopTest();
+
+            AsyncRequest__c failed = [SELECT Error__c, NumberOfAttempts__c, StartDatetime__c FROM AsyncRequest__c WHERE Id = :asyncRequest.Id];
+            Assert.isFalse(failed.Error__c, 'Request with retries left should not be errored');
+            Assert.areEqual(1, failed.NumberOfAttempts__c, 'Attempt should be counted');
+            Assert.isTrue(failed.StartDatetime__c > earliestRetry, 'Retry should wait the default delay');
+        }
+    }
+
+    @IsTest static void testFailedRequestErrorsWhenRetriesAreExceeded() {
+        AsyncRequestProcessor.testExpectException = true;
+
+        System.runAs(AsyncRequestTestUtil.getAsyncUser()) {
+            AsyncRequest__c asyncRequest = new AsyncRequest__c(
+                    AsyncType__c = TEST_TYPE,
+                    Params__c = 'TestProcessorException',
+                    NumberOfAttempts__c = 3,
+                    RetryCount__c = 3);
+            AsyncRequestTestUtil.insertWithoutTrigger(new List<AsyncRequest__c>{asyncRequest});
+
+            Test.startTest();
+            AsyncRequestProcessor.enqueueJob(null, null, TEST_TYPE);
+            Test.stopTest();
+
+            AsyncRequest__c failed = [SELECT Error__c, NumberOfAttempts__c FROM AsyncRequest__c WHERE Id = :asyncRequest.Id];
+            Assert.isTrue(failed.Error__c, 'Request should be errored once its retries are used up');
+            Assert.areEqual(4, failed.NumberOfAttempts__c, 'Final attempt should be counted');
         }
     }
 
