@@ -1,6 +1,7 @@
 public abstract class AsyncRequestProcessor implements Queueable, Database.AllowsCallouts, Finalizer {
 
     private static final String developerEditionErrMsg = 'DEVELOPER_EDITION_STACK_DEPTH_LIMIT';
+    private static final Integer RETRY_DELAY_MINUTES = 5;
 
     @TestVisible private static Boolean testChildContext = false;
     @TestVisible private static Boolean testExpectException = false;
@@ -71,7 +72,7 @@ public abstract class AsyncRequestProcessor implements Queueable, Database.Allow
             }
         } catch (Exception ex) {
             currentRequest.ErrorMessage__c = ex.getMessage();
-            currentRequest.Error__c = true;
+            retryOrFail(currentRequest);
             Logger.error(ex.getTypeName() + ':: ' + ex.getMessage(), currentRequest);
             Logger.saveLog();
 
@@ -106,6 +107,15 @@ public abstract class AsyncRequestProcessor implements Queueable, Database.Allow
 
     protected abstract void processRequest(AsyncRequest__c request);
 
+    // RetryCount__c counts retries after the first attempt; a blank RetryCount__c fails on the first error
+    private void retryOrFail(AsyncRequest__c request) {
+        if (request.RetryCount__c == null || request.NumberOfAttempts__c > request.RetryCount__c) {
+            request.Error__c = true;
+        } else {
+            request.StartDatetime__c = Datetime.now().addMinutes(RETRY_DELAY_MINUTES);
+        }
+    }
+
     public static void enqueueJob(Id currentJobId, Id parentRequestId, String asyncType) {
         if (isQueued(currentJobId, asyncType)) return;   // Already have one queued that isn't this one.
 
@@ -134,7 +144,7 @@ public abstract class AsyncRequestProcessor implements Queueable, Database.Allow
         if (this.parentRequestId != null) return getOpenRequestsByParentId();
 
         return [
-                SELECT AsyncType__c, Params__c, StartDatetime__c, NumberOfAttempts__c,
+                SELECT AsyncType__c, Params__c, StartDatetime__c, NumberOfAttempts__c, RetryCount__c,
                         ParentRequest__c, ParentRequest__r.AsyncType__c, IsDependent__c
                 FROM AsyncRequest__c
                 WHERE Error__c = FALSE
@@ -148,7 +158,7 @@ public abstract class AsyncRequestProcessor implements Queueable, Database.Allow
 
     protected List<AsyncRequest__c> getOpenRequestsByParentId() {
         return [
-                SELECT AsyncType__c, Params__c, StartDatetime__c, NumberOfAttempts__c,
+                SELECT AsyncType__c, Params__c, StartDatetime__c, NumberOfAttempts__c, RetryCount__c,
                         ParentRequest__c, ParentRequest__r.AsyncType__c, IsDependent__c
                 FROM AsyncRequest__c
                 WHERE Error__c = FALSE
