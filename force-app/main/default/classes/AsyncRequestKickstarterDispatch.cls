@@ -3,8 +3,11 @@ public inherited sharing class AsyncRequestKickstarterDispatch implements Schedu
         void execute(SchedulableContext sc);
     }
 
+    @TestVisible
+    private static String dispatchTypeName = 'AsyncRequestKickstarter';
+
     public void execute(SchedulableContext sc) {
-        Type targetType = Type.forName('AsyncRequestKickstarter');
+        Type targetType = Type.forName(dispatchTypeName);
         if (targetType != null) {
             IScheduledDispatch obj = (IScheduledDispatch)targetType.newInstance();
             try {

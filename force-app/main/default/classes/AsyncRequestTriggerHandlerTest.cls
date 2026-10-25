@@ -1,33 +1,41 @@
 @IsTest
 private class AsyncRequestTriggerHandlerTest {
+    @TestSetup static void setup() {
+        AsyncRequestTestUtil.createAsyncUser();
+    }
+
     @IsTest static void testInsertRequest() {
-        AsyncRequest__c asyncRequest = new AsyncRequest__c();
-        asyncRequest.AsyncType__c = TestProcessor.class.getName();
+        System.runAs(AsyncRequestTestUtil.getAsyncUser()) {
+            AsyncRequest__c asyncRequest = new AsyncRequest__c();
+            asyncRequest.AsyncType__c = TestProcessor.class.getName();
 
-        Test.startTest();
+            Test.startTest();
 
-        insert asyncRequest;
+            insert asyncRequest;
 
-        Test.stopTest();
+            Test.stopTest();
+        }
 
         System.assert(AsyncRequestTriggerHandler.asyncTypesToEnqueue.contains(TestProcessor.class.getName()));
     }
 
     @IsTest static void testRetryAsyncRequests() {
-        AsyncRequest__c asyncRequest = new AsyncRequest__c();
-        asyncRequest.AsyncType__c = TestProcessor.class.getName();
+        System.runAs(AsyncRequestTestUtil.getAsyncUser()) {
+            AsyncRequest__c asyncRequest = new AsyncRequest__c();
+            asyncRequest.AsyncType__c = TestProcessor.class.getName();
 
-        insert asyncRequest;
+            insert asyncRequest;
 
-        asyncRequest.Error__c = true;
-        update asyncRequest;
+            asyncRequest.Error__c = true;
+            update asyncRequest;
 
-        Test.startTest();
+            Test.startTest();
 
-        asyncRequest.Error__c = false;
-        update asyncRequest;
+            asyncRequest.Error__c = false;
+            update asyncRequest;
 
-        Test.stopTest();
+            Test.stopTest();
+        }
 
         System.assert(AsyncRequestTriggerHandler.asyncTypesToEnqueue.contains(TestProcessor.class.getName()));
     }

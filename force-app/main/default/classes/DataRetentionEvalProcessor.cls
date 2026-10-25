@@ -1,7 +1,7 @@
 public inherited sharing class DataRetentionEvalProcessor extends AsyncRequestProcessor {
 
     @TestVisible
-    private void processRequest(AsyncRequest__c request) {
+    protected override void processRequest(AsyncRequest__c request) {
         if (appSettings.dataRetentionEvalEnabled || Test.isRunningTest()) {
             Database.executeBatch(new DataRetentionEvalBatch(), 5000);
         } else {

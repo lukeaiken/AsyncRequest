@@ -104,7 +104,7 @@ public abstract class AsyncRequestProcessor implements Queueable, Database.Allow
         }
     }
 
-    abstract void processRequest(AsyncRequest__c request);
+    protected abstract void processRequest(AsyncRequest__c request);
 
     public static void enqueueJob(Id currentJobId, Id parentRequestId, String asyncType) {
         if (isQueued(currentJobId, asyncType)) return;   // Already have one queued that isn't this one.

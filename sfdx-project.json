@@ -11,7 +11,7 @@
     "name": "AsyncRequest",
     "namespace": "",
     "sfdcLoginUrl": "https://login.salesforce.com",
-    "sourceApiVersion": "54.0",
+    "sourceApiVersion": "68.0",
     "packageAliases": {
         "AsyncRequest": "0Ho4W000000PBO9SAO"
     }
