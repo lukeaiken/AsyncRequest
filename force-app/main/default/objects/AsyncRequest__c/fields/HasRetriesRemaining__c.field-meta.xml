@@ -1,0 +1,11 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<CustomField xmlns="http://soap.sforce.com/2006/04/metadata">
+    <fullName>HasRetriesRemaining__c</fullName>
+    <description>True while Number of Attempts has not exceeded Retry Count. Lets errored requests whose Retry Count was raised be picked up again.</description>
+    <externalId>false</externalId>
+    <formula>NOT(ISBLANK(RetryCount__c)) &amp;&amp; NumberOfAttempts__c &lt;= RetryCount__c</formula>
+    <formulaTreatBlanksAs>BlankAsBlank</formulaTreatBlanksAs>
+    <label>Has Retries Remaining</label>
+    <trackTrending>false</trackTrending>
+    <type>Checkbox</type>
+</CustomField>

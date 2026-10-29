@@ -11,7 +11,7 @@ public inherited sharing class AsyncRequestKickstarter implements AsyncRequestKi
             for (AsyncRequest__c request : [
                     SELECT AsyncType__c
                     FROM AsyncRequest__c
-                    WHERE Error__c = FALSE
+                    WHERE (Error__c = FALSE OR HasRetriesRemaining__c = TRUE)
                     AND ParentRequest__c = NULL
                     AND StartDatetime__c <= :NOW
             ]) {

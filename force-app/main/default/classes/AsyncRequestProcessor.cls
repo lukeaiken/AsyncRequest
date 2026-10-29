@@ -112,6 +112,7 @@ public abstract class AsyncRequestProcessor implements Queueable, Database.Allow
         if (request.RetryCount__c == null || request.NumberOfAttempts__c > request.RetryCount__c) {
             request.Error__c = true;
         } else {
+            request.Error__c = false;
             request.StartDatetime__c = Datetime.now().addMinutes(RETRY_DELAY_MINUTES);
         }
     }
@@ -147,7 +148,7 @@ public abstract class AsyncRequestProcessor implements Queueable, Database.Allow
                 SELECT AsyncType__c, Params__c, StartDatetime__c, NumberOfAttempts__c, RetryCount__c,
                         ParentRequest__c, ParentRequest__r.AsyncType__c, IsDependent__c
                 FROM AsyncRequest__c
-                WHERE Error__c = FALSE
+                WHERE (Error__c = FALSE OR HasRetriesRemaining__c = TRUE)
                 AND (ParentRequest__c = NULL OR ParentRequest__r.StartDatetime__c = NULL)
                 AND StartDatetime__c <= :Datetime.now()
                 AND AsyncType__c = :currentAsyncType
@@ -161,7 +162,7 @@ public abstract class AsyncRequestProcessor implements Queueable, Database.Allow
                 SELECT AsyncType__c, Params__c, StartDatetime__c, NumberOfAttempts__c, RetryCount__c,
                         ParentRequest__c, ParentRequest__r.AsyncType__c, IsDependent__c
                 FROM AsyncRequest__c
-                WHERE Error__c = FALSE
+                WHERE (Error__c = FALSE OR HasRetriesRemaining__c = TRUE)
                 AND AsyncType__c = :currentAsyncType
                 AND StartDatetime__c <= :Datetime.now()
                 AND ParentRequest__c = :parentRequestId
@@ -206,7 +207,7 @@ public abstract class AsyncRequestProcessor implements Queueable, Database.Allow
         return [
                 SELECT Id
                 FROM AsyncRequest__c
-                WHERE Error__c = FALSE
+                WHERE (Error__c = FALSE OR HasRetriesRemaining__c = TRUE)
                 AND (ParentRequest__c = NULL OR ParentRequest__r.StartDatetime__c = NULL)
                 AND AsyncType__c = :currentAsyncType
                 AND StartDatetime__c <= :Datetime.now()
@@ -218,7 +219,7 @@ public abstract class AsyncRequestProcessor implements Queueable, Database.Allow
         return [
                 SELECT Id
                 FROM AsyncRequest__c
-                WHERE Error__c = FALSE
+                WHERE (Error__c = FALSE OR HasRetriesRemaining__c = TRUE)
                 AND StartDatetime__c <= :Datetime.now()
                 AND AsyncType__c = :currentAsyncType
                 AND ParentRequest__c = :parentRequestId
