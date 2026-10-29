@@ -8,6 +8,7 @@ private class AsyncRequestKickstarterTest {
     }
 
     @IsTest static void testExecuteEnqueuesReadyRequestsAndReschedules() {
+        abortExistingKickstarterJobs();
         System.runAs(AsyncRequestTestUtil.getAsyncUser()) {
             AsyncRequestTestUtil.insertWithoutTrigger(new List<AsyncRequest__c>{
                     new AsyncRequest__c(AsyncType__c = TestProcessor.class.getName(), StartDatetime__c = Datetime.now().addMinutes(-1))});
@@ -21,7 +22,34 @@ private class AsyncRequestKickstarterTest {
         }
     }
 
+    @IsTest static void testExecuteEnqueuesErroredRequestsWithRetriesRemaining() {
+        abortExistingKickstarterJobs();
+        System.runAs(AsyncRequestTestUtil.getAsyncUser()) {
+            AsyncRequestTestUtil.insertWithoutTrigger(new List<AsyncRequest__c>{
+                    new AsyncRequest__c(AsyncType__c = TestProcessor.class.getName(), StartDatetime__c = Datetime.now().addMinutes(-1),
+                            Error__c = true, NumberOfAttempts__c = 3, RetryCount__c = 5)});
+
+            new AsyncRequestKickstarter().execute(null);
+
+            Assert.areEqual(1, Limits.getQueueableJobs(), 'Errored request with retries remaining should be enqueued');
+        }
+    }
+
+    @IsTest static void testExecuteSkipsErroredRequestsWithoutRetriesRemaining() {
+        abortExistingKickstarterJobs();
+        System.runAs(AsyncRequestTestUtil.getAsyncUser()) {
+            AsyncRequestTestUtil.insertWithoutTrigger(new List<AsyncRequest__c>{
+                    new AsyncRequest__c(AsyncType__c = TestProcessor.class.getName(), StartDatetime__c = Datetime.now().addMinutes(-1),
+                            Error__c = true, NumberOfAttempts__c = 4, RetryCount__c = 3)});
+
+            new AsyncRequestKickstarter().execute(null);
+
+            Assert.areEqual(0, Limits.getQueueableJobs(), 'Errored request without retries remaining should not be enqueued');
+        }
+    }
+
     @IsTest static void testRescheduleSkippedWhenKickstarterAlreadyScheduled() {
+        abortExistingKickstarterJobs();
         System.runAs(AsyncRequestTestUtil.getAsyncUser()) {
             System.schedule('Async Request Kickstarter Dispatch - existing', CRON_EXPRESSION, new AsyncRequestKickstarterDispatch());
 
@@ -35,6 +63,7 @@ private class AsyncRequestKickstarterTest {
     }
 
     @IsTest static void testScheduledExecuteAbortsAndReschedules() {
+        abortExistingKickstarterJobs();
         System.runAs(AsyncRequestTestUtil.getAsyncUser()) {
             Id triggerId = System.schedule('Kickstarter test trigger', CRON_EXPRESSION, new AsyncRequestKickstarterDispatch());
 
@@ -47,6 +76,12 @@ private class AsyncRequestKickstarterTest {
             Assert.areEqual(1, [SELECT COUNT() FROM CronTrigger WHERE CronJobDetail.Name LIKE :KICKSTARTER_JOB_PREFIX],
                     'Kickstarter should be rescheduled after the abort');
         }
+    }
+
+    // Tests see the org's real CronTriggers; aborting the scheduled kickstarter here is rolled back with the test
+    private static void abortExistingKickstarterJobs() {
+        for (CronTrigger job : [SELECT Id FROM CronTrigger WHERE CronJobDetail.Name LIKE :KICKSTARTER_JOB_PREFIX])
+            System.abortJob(job.Id);
     }
 
     private class TestSchedulableContext implements SchedulableContext {
